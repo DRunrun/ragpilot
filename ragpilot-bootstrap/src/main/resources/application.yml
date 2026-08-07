@@ -1,0 +1,17 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: ragpilot-bootstrap
+  ai:
+    ollama:
+      base-url: http://localhost:11434
+      chat:
+        options:
+          model: ${RAGPILOT_HELLO_MODEL:qwen3:32b}
+          temperature: 0.2
+
+logging:
+  level:
+    com.ragpilot: INFO

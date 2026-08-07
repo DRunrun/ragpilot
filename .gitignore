@@ -1,0 +1,15 @@
+target/
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+.vscode/
+.DS_Store
+*.log
+.env
+.env.*
+!.env.example
+reports/
+*.hprof
+.cursor/*.log

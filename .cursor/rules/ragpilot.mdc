@@ -1,0 +1,15 @@
+---
+description: RagPilot module boundaries and stack locks
+globs:
+alwaysApply: true
+---
+
+# RagPilot Cursor Rules
+
+- Follow root `AGENTS.md` and `docs/m1-spec.md` before adding features.
+- `ragpilot-core` must NOT depend on Spring.
+- Do not implement Defer items (console UI, NL2SQL, LangChain4j) unless explicitly asked.
+- Prefer extending existing packages under `com.ragpilot.*` over new top-level folders.
+- Domain contracts use typed records (`AskResult`, `Citation`), not raw maps.
+- After changing chunk/retrieval/prompt behavior, note evaluation impact in the PR/commit body.
+- Keep changes scoped: one concern per change set.
