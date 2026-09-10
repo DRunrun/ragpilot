@@ -1,16 +1,92 @@
 server:
-  port: 8080
+  port: 8081
 
 spring:
   application:
     name: ragpilot-bootstrap
+  # 向量库数据源：PGVector。默认连本机 compose（见 docker-compose.yml 宿主机 5433）。
+  # 远程库请用环境变量 RAGPILOT_DB_HOST/PORT/USER/PASSWORD 覆盖，不要把公网地址写进仓库。
+  # sslmode=disable：非 SSL 的 PG 上若走默认 SSL 协商，会 EOF 导致「尝试连线已失败」。
+  # 注意：Spring AI PgVectorStore 启动时 afterPropertiesSet 会建连，PG 必须可达。
+  datasource:
+    url: jdbc:postgresql://${RAGPILOT_DB_HOST:127.0.0.1}:${RAGPILOT_DB_PORT:5433}/ragpilot?sslmode=disable
+    username: ${RAGPILOT_DB_USER:ragpilot}
+    password: ${RAGPILOT_DB_PASSWORD:ragpilot}
+    hikari:
+      # -1：池创建时不因探测失败直接失败；真正连不上仍会在 PgVectorStore 初始化时报错
+      initialization-fail-timeout: -1
+      connection-timeout: 10000
   ai:
-    ollama:
-      base-url: http://localhost:11434
+    openai:
+      # LM Studio ignores the key but Spring AI requires a non-blank value
+      api-key: ${RAGPILOT_API_KEY:lm-studio}
+      # Do NOT append /v1 — Spring AI adds /v1/chat/completions
+      base-url: ${RAGPILOT_LLM_BASE_URL:http://127.0.0.1:1234}
       chat:
         options:
-          model: ${RAGPILOT_HELLO_MODEL:qwen3:32b}
+          model: ${RAGPILOT_CHAT_MODEL:qwen3.6-35b-a3b-nvfp4}
           temperature: 0.2
+      # Embedding 客户端：与 chat 共用 base-url（LM Studio 同一个 OpenAI 兼容服务）
+      embedding:
+        options:
+          model: ${RAGPILOT_EMBEDDING_MODEL:text-embedding-nomic-embed-text-v1.5}
+    vectorstore:
+      pgvector:
+        initialize-schema: true
+        # 维度必须与 embedding 模型输出一致：nomic-embed = 768，写错要 drop 表重来
+        dimensions: 768
+        index-type: hnsw
+        distance-type: cosine_distance
+
+# RagPilot 业务配置：全部集中在 ragpilot.* 前缀下，绑定到 RagPilotProperties，
+# 代码里禁止出现这些魔法数。默认值口径见 docs/m1-spec.md §2。
+ragpilot:
+  # Admin UI 静态目录（相对仓库根或绝对路径）；不存在时回退 classpath:/static/admin/
+  admin:
+    ui-dist: ${RAGPILOT_ADMIN_UI_DIST:ragpilot-admin-ui/dist}
+  chunk:
+    size: 512        # 每块目标字符数（M1 按字符近似 token）
+    overlap: 64      # 相邻块重叠字符数，保住跨边界语义
+  retrieval:
+    top-k: 5         # 向量召回条数
+    # 低于此相似度视为无召回并拒答。验收实测（nomic-embed + 样例语料）：
+    # 「Bean 生命周期」≈0.68，「南京天气」≈0.46 → 取 0.55 切开两者。
+    min-score: 0.55
+    # F2.4：检索模式。默认 VECTOR 保持 M1；消融切 HYBRID / HYBRID_RERANK
+    mode: VECTOR
+    # F2.3：Rerank 可插拔。默认关闭 → NoOpReranker；
+    # HYBRID_RERANK 模式会调用此 Bean（enabled=true 时为 BgeReranker）。
+    rerank:
+      enabled: false
+      model: bge-reranker-v2-m3
+      base-url: ${RAGPILOT_RERANK_BASE_URL:http://127.0.0.1:8082}
+  generation:
+    model: ${RAGPILOT_CHAT_MODEL:qwen3.6-35b-a3b-nvfp4}
+    temperature: 0.0 # 评测可复现
+    # F4.2：整次流式生成墙钟超时（秒），超时走 refused 降级而非 500
+    timeout-seconds: 60
+  # F4.1：当前激活的 Prompt 版本（classpath prompts/ 下）
+  prompt:
+    active: rag-v1
+  embedding:
+    model: ${RAGPILOT_EMBEDDING_MODEL:text-embedding-nomic-embed-text-v1.5}
+  refusal:
+    empty-hits: true # 无命中即拒答，禁止自由发挥
+  # M3 Agent 配置
+  agent:
+    max-steps: 5
+    step-timeout-ms: 15000
+    http-allowlist: docs.spring.io,127.0.0.1
+    http-timeout-ms: 5000
+  # Token 单价（USD / 1K）；本地 LM Studio 默认 0
+  token:
+    prompt-price-per-1k: 0
+    completion-price-per-1k: 0
+  # F3.7：可选 MCP。默认关闭；启用后注册 mcp_proxy 工具
+  mcp:
+    enabled: false
+    endpoint: ${RAGPILOT_MCP_ENDPOINT:http://127.0.0.1:3100/mcp}
+    timeout-ms: 5000
 
 logging:
   level:

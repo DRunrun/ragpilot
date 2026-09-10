@@ -1,14 +1,24 @@
+# RagPilot 依赖服务：PGVector（向量库）。
+# 端口固定 5433，避免与本机已装的 PostgreSQL（5432）冲突。
 services:
   postgres:
     image: pgvector/pgvector:pg16
+    container_name: ragpilot-pgvector
     environment:
       POSTGRES_USER: ragpilot
       POSTGRES_PASSWORD: ragpilot
       POSTGRES_DB: ragpilot
     ports:
-      - "5432:5432"
+      # 宿主机 5433 → 容器 5432；改端口只改冒号左侧
+      - "5433:5432"
     volumes:
       - ragpilot_pg:/var/lib/postgresql/data
+    healthcheck:
+      # 供应用/脚本判断库是否就绪，比盲连重试可靠
+      test: ["CMD-SHELL", "pg_isready -U ragpilot -d ragpilot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
 volumes:
   ragpilot_pg:

@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RagPilot · Live Demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #14201c;
+      --muted: #5c6b64;
+      --line: #d5ddd8;
+      --paper: #f3f6f4;
+      --panel: #ffffff;
+      --accent: #0f7a62;
+      --accent-soft: #d8efe7;
+      --warn: #9a6b12;
+      --warn-bg: #f7efd8;
+      --danger: #b42318;
+      --danger-bg: #fdeceb;
+      --ok: #0f7a62;
+      --stage: #e8eeea;
+      --font: "Sora", sans-serif;
+      --mono: "IBM Plex Mono", ui-monospace, monospace;
+      --rail: 300px;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: var(--font);
+      background:
+        radial-gradient(900px 480px at 0% 0%, #dff0e8 0%, transparent 55%),
+        radial-gradient(700px 420px at 100% 0%, #e7ece4 0%, transparent 50%),
+        linear-gradient(180deg, #eef3f0 0%, var(--paper) 40%, #e9efeb 100%);
+    }
+    .shell {
+      max-width: 1180px;
+      margin: 0 auto;
+      min-height: 100%;
+      padding: 28px 20px 20px;
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      gap: 18px;
+    }
+
+    /* —— Brand hero strip（面试第一眼） —— */
+    .brand {
+      display: grid;
+      gap: 10px;
+      animation: rise 0.55s ease both;
+    }
+    .brand-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .logo {
+      font-size: clamp(2rem, 4vw, 2.75rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1;
+      margin: 0;
+    }
+    .tag {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 0.98rem;
+      max-width: 36rem;
+      line-height: 1.45;
+    }
+    .status-pill {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      align-self: center;
+    }
+    .status-pill.ok { color: var(--ok); border-color: #9dcebe; background: var(--accent-soft); }
+    .status-pill.bad { color: var(--danger); border-color: #f0b4ae; background: var(--danger-bg); }
+    .gateway-line {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--muted);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 18px;
+      padding-top: 2px;
+    }
+    .gateway-line b { color: var(--ink); font-weight: 500; }
+
+    /* —— Pipeline story —— */
+    .pipeline {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+      animation: rise 0.65s ease both 0.05s;
+    }
+    .pipe-step {
+      border: 1px solid var(--line);
+      background: color-mix(in srgb, var(--panel) 82%, transparent);
+      padding: 12px 12px 10px;
+      min-height: 78px;
+      transition: border-color 0.2s, background 0.2s, transform 0.2s;
+    }
+    .pipe-step.active {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      transform: translateY(-1px);
+    }
+    .pipe-step .n {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      color: var(--accent);
+      margin-bottom: 4px;
+    }
+    .pipe-step .t { font-size: 0.92rem; font-weight: 600; }
+    .pipe-step .d { font-size: 0.72rem; color: var(--muted); margin-top: 4px; line-height: 1.35; }
+
+    /* —— Main workspace —— */
+    .workspace {
+      display: grid;
+      grid-template-columns: var(--rail) 1fr;
+      gap: 16px;
+      min-height: 0;
+      animation: rise 0.7s ease both 0.1s;
+    }
+    .rail, .stage {
+      border: 1px solid var(--line);
+      background: color-mix(in srgb, var(--panel) 90%, transparent);
+      backdrop-filter: blur(6px);
+      min-height: 0;
+    }
+    .rail {
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      overflow: auto;
+    }
+    .rail h2 {
+      margin: 0;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .rail section { display: grid; gap: 8px; }
+    .hint {
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    .seg {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .seg button, .ghost, .primary {
+      font-family: var(--font);
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--ink);
+      padding: 9px 10px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .seg button.on {
+      background: var(--ink);
+      border-color: var(--ink);
+      color: #f4faf7;
+    }
+    .ghost:hover, .seg button:hover { border-color: var(--accent); }
+    .primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      font-weight: 600;
+    }
+    .primary:hover { filter: brightness(1.05); }
+    .primary:disabled, .ghost:disabled { opacity: 0.5; cursor: not-allowed; }
+    select, input[type="text"] {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--ink);
+      padding: 8px 10px;
+      font: inherit;
+      font-size: 0.82rem;
+    }
+    .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .row-actions .ghost, .row-actions .primary { flex: 1; min-width: 0; }
+    .inspect {
+      border-top: 1px dashed var(--line);
+      padding-top: 10px;
+      display: grid;
+      gap: 8px;
+    }
+    .inspect pre {
+      margin: 0;
+      max-height: 160px;
+      overflow: auto;
+      background: var(--stage);
+      border: 1px solid var(--line);
+      padding: 8px;
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .stage {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      min-height: 520px;
+    }
+    .stage-head {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+    .stage-head .title { font-weight: 600; font-size: 0.95rem; }
+    .stage-head .meta { font-family: var(--mono); font-size: 0.7rem; color: var(--muted); }
+    .chat {
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      background:
+        linear-gradient(180deg, transparent, transparent 96%, rgba(20,32,28,0.03));
+    }
+    .empty {
+      margin: auto;
+      text-align: center;
+      color: var(--muted);
+      max-width: 22rem;
+      line-height: 1.5;
+      font-size: 0.92rem;
+      animation: fade 0.8s ease both;
+    }
+    .empty strong { color: var(--ink); display: block; margin-bottom: 6px; font-size: 1.05rem; }
+
+    .msg {
+      max-width: 92%;
+      line-height: 1.55;
+      font-size: 0.92rem;
+      animation: rise 0.25s ease both;
+    }
+    .msg.user {
+      align-self: flex-end;
+      background: var(--ink);
+      color: #f4faf7;
+      padding: 10px 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .msg.bot { align-self: flex-start; width: min(100%, 40rem); }
+    .msg .role {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .answer {
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .cite-mark {
+      color: var(--accent);
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 0.8em;
+      vertical-align: super;
+      font-weight: 600;
+    }
+    .citations { margin-top: 8px; display: grid; gap: 6px; }
+    .cite-card { border: 1px solid var(--line); background: var(--panel); }
+    .cite-head {
+      display: flex;
+      gap: 8px;
+      padding: 7px 10px;
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 0.74rem;
+      color: var(--muted);
+    }
+    .cite-head:hover { background: var(--accent-soft); }
+    .cite-index { color: var(--accent); font-weight: 700; }
+    .cite-snippet {
+      display: none;
+      padding: 8px 10px 10px;
+      border-top: 1px dashed var(--line);
+      font-size: 0.8rem;
+      white-space: pre-wrap;
+    }
+    .cite-card.open .cite-snippet { display: block; }
+    .refused-bar {
+      border: 1px solid #e0c57a;
+      background: var(--warn-bg);
+      color: var(--warn);
+      padding: 9px 11px;
+      font-size: 0.88rem;
+      margin-bottom: 8px;
+    }
+    .trace-panel { margin-top: 8px; border: 1px solid var(--line); background: var(--panel); }
+    .trace-toggle {
+      width: 100%;
+      text-align: left;
+      border: 0;
+      background: transparent;
+      padding: 8px 10px;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .trace-toggle:hover { background: var(--accent-soft); color: var(--ink); }
+    .trace-body { display: none; padding: 0 10px 10px; gap: 8px; }
+    .trace-panel.open .trace-body { display: grid; }
+    .trace-step {
+      border: 1px dashed var(--line);
+      padding: 8px;
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--muted);
+    }
+    .trace-step strong { color: var(--accent); }
+    .trace-step .obs { color: var(--ink); margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
+    .meta-line { font-family: var(--mono); font-size: 0.68rem; color: var(--muted); }
+
+    .composer {
+      border-top: 1px solid var(--line);
+      padding: 12px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      background: var(--panel);
+    }
+    textarea {
+      width: 100%;
+      min-height: 72px;
+      resize: vertical;
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      font: inherit;
+      font-size: 0.9rem;
+      outline: none;
+      background: var(--paper);
+    }
+    textarea:focus { border-color: var(--accent); }
+    .send {
+      align-self: end;
+      height: 44px;
+      padding: 0 18px;
+      border: 0;
+      background: var(--ink);
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .send:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .foot {
+      font-size: 0.75rem;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      animation: rise 0.75s ease both 0.12s;
+    }
+    .foot code { font-family: var(--mono); }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fade {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @media (max-width: 900px) {
+      .pipeline { grid-template-columns: 1fr 1fr; }
+      .workspace { grid-template-columns: 1fr; }
+      .rail { max-height: none; }
+      .stage { min-height: 420px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div style="margin:0 0 12px;padding:10px 14px;border:1px solid #cfe3da;border-radius:8px;background:#eef8f3;font-size:14px;line-height:1.5;">
+      <strong>管理端已上线：</strong>
+      日常调试请使用
+      <a href="/admin/" style="color:#0f7a62;font-weight:600;">Admin 控制台「在线调试」</a>
+      （分块 / 知识库 / Prompt / 评测等也在那里）。本页保留为旧 Demo。
+    </div>
+    <header class="brand">
+      <div class="brand-row">
+        <div>
+          <h1 class="logo">RagPilot</h1>
+          <p class="tag">可评测、可观测的 Java RAG 运行时 —— 本地 Live Demo。沿左侧工作台走一遍，就能讲清整条链路。</p>
+        </div>
+        <div id="status" class="status-pill">checking…</div>
+      </div>
+      <div id="gateway" class="gateway-line">加载网关…</div>
+    </header>
+
+    <nav class="pipeline" aria-label="RAG 链路">
+      <div class="pipe-step" data-stage="ingest"><div class="n">01</div><div class="t">灌入</div><div class="d">文档 → 分块 → 向量入库</div></div>
+      <div class="pipe-step" data-stage="retrieve"><div class="n">02</div><div class="t">检索</div><div class="d">向量 / 混合 / Rerank</div></div>
+      <div class="pipe-step" data-stage="generate"><div class="n">03</div><div class="t">生成</div><div class="d">Prompt 版本 + 流式输出</div></div>
+      <div class="pipe-step" data-stage="ground"><div class="n">04</div><div class="t">引用 / 拒答</div><div class="d">有证据才答，无证据拒答</div></div>
+      <div class="pipe-step" data-stage="trace"><div class="n">05</div><div class="t">Trace</div><div class="d">逐步展开给面试官看</div></div>
+    </nav>
+
+    <div class="workspace">
+      <aside class="rail">
+        <section>
+          <h2>演示路径</h2>
+          <p class="hint">建议顺序：灌入样例 → 检索预览 → RAG 提问（看引用）→ 库外问题（看拒答）→ 切 Agent（看 Trace）。</p>
+        </section>
+
+        <section>
+          <h2>问答模式</h2>
+          <div class="seg" id="modeSeg">
+            <button type="button" class="on" data-mode="rag">RAG</button>
+            <button type="button" data-mode="agent">Agent</button>
+          </div>
+          <p class="hint" id="modeHint">单次检索 + 流式生成 + citation。适合讲主链路。</p>
+        </section>
+
+        <section>
+          <h2>Prompt 版本</h2>
+          <select id="promptSelect" aria-label="Prompt 版本"></select>
+          <div class="row-actions">
+            <button type="button" class="ghost" id="promptApply">切换</button>
+            <button type="button" class="ghost" id="promptRollback">回滚</button>
+          </div>
+          <p class="hint" id="promptHint">当前版本会写进 done / Trace。</p>
+        </section>
+
+        <section>
+          <h2>语料</h2>
+          <button type="button" class="primary" id="ingest">灌入 samples/</button>
+          <p class="hint">把 Spring Bean 生命周期样例写入 PGVector。</p>
+        </section>
+
+        <section class="inspect">
+          <h2>检索预览</h2>
+          <p class="hint">不生成答案，只看三模式命中，用来讲 VECTOR vs HYBRID。</p>
+          <input id="retrieveQ" type="text" placeholder="预览查询，如 BeanPostProcessor" />
+          <button type="button" class="ghost" id="retrieveBtn">跑 /retrieve/modes</button>
+          <pre id="retrieveOut">尚未预览</pre>
+        </section>
+      </aside>
+
+      <main class="stage">
+        <div class="stage-head">
+          <div class="title" id="stageTitle">对话 · RAG</div>
+          <div class="meta" id="stageMeta">等待提问</div>
+        </div>
+        <div id="chat" class="chat" aria-live="polite">
+          <div class="empty" id="emptyState">
+            <strong>从左侧「灌入 samples/」开始</strong>
+            然后问一句「Spring Bean 的生命周期是什么？」，看流式答案与引用；再问「今天南京天气」看拒答。
+          </div>
+        </div>
+        <form class="composer" id="form">
+          <textarea id="q" placeholder="输入问题… 例如：Spring Bean 的生命周期是什么？"></textarea>
+          <button class="send" id="send" type="submit">发送</button>
+        </form>
+      </main>
+    </div>
+
+    <footer class="foot">
+      <span>静态调试页 · 无业务逻辑 · 端口 <code>8081</code></span>
+      <span>API：<code>/ask</code> · <code>/agent/ask</code> · <code>/trace</code> · <code>/prompt</code> · <code>/retrieve/modes</code></span>
+    </footer>
+  </div>
+
+  <script>
+    const chat = document.getElementById("chat");
+    const emptyState = document.getElementById("emptyState");
+    const form = document.getElementById("form");
+    const qEl = document.getElementById("q");
+    const sendBtn = document.getElementById("send");
+    const ingestBtn = document.getElementById("ingest");
+    const statusEl = document.getElementById("status");
+    const gatewayEl = document.getElementById("gateway");
+    const stageTitle = document.getElementById("stageTitle");
+    const stageMeta = document.getElementById("stageMeta");
+    const modeHint = document.getElementById("modeHint");
+    const promptSelect = document.getElementById("promptSelect");
+    const promptHint = document.getElementById("promptHint");
+    const retrieveQ = document.getElementById("retrieveQ");
+    const retrieveOut = document.getElementById("retrieveOut");
+
+    let mode = "rag";
+
+    const MODE_COPY = {
+      rag: "单次检索 + 流式生成 + citation。适合讲主链路。",
+      agent: "ReAct 多步：先 knowledge_search，再整理答案。适合展开 Trace。"
+    };
+
+    function setStage(name) {
+      document.querySelectorAll(".pipe-step").forEach((el) => {
+        el.classList.toggle("active", el.dataset.stage === name);
+      });
+    }
+
+    function clearEmpty() {
+      if (emptyState && emptyState.parentNode) emptyState.remove();
+    }
+
+    function addUserMsg(text) {
+      clearEmpty();
+      const div = document.createElement("div");
+      div.className = "msg user";
+      div.textContent = text;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function addBotShell() {
+      clearEmpty();
+      const div = document.createElement("div");
+      div.className = "msg bot";
+      div.innerHTML = '<div class="role">assistant</div>';
+      const answer = document.createElement("div");
+      answer.className = "answer";
+      const cites = document.createElement("div");
+      cites.className = "citations";
+      const trace = document.createElement("div");
+      trace.className = "trace-panel";
+      div.appendChild(answer);
+      div.appendChild(cites);
+      div.appendChild(trace);
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+      return { answer, cites, trace, root: div };
+    }
+
+    function addSystem(text) {
+      clearEmpty();
+      const div = document.createElement("div");
+      div.className = "msg bot";
+      div.innerHTML = '<div class="role">system</div>';
+      const body = document.createElement("div");
+      body.className = "answer";
+      body.textContent = text;
+      div.appendChild(body);
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function addCiteCard(cites, c) {
+      const card = document.createElement("div");
+      card.className = "cite-card";
+      card.id = "cite-card-" + c.index;
+      const head = document.createElement("div");
+      head.className = "cite-head";
+      head.innerHTML = '<span class="cite-index">[' + c.index + ']</span>'
+        + '<span>' + (c.docId || "") + " · " + (c.chunkId || "") + "</span>";
+      const snippet = document.createElement("div");
+      snippet.className = "cite-snippet";
+      snippet.textContent = c.snippet || "";
+      head.addEventListener("click", () => card.classList.toggle("open"));
+      card.appendChild(head);
+      card.appendChild(snippet);
+      cites.appendChild(card);
+    }
+
+    function renderCiteMarks(answerEl) {
+      const raw = answerEl.textContent;
+      answerEl.textContent = "";
+      const re = /\[(\d+)]/g;
+      let last = 0, m;
+      while ((m = re.exec(raw)) !== null) {
+        answerEl.appendChild(document.createTextNode(raw.slice(last, m.index)));
+        const mark = document.createElement("span");
+        mark.className = "cite-mark";
+        mark.textContent = "[" + m[1] + "]";
+        const idx = m[1];
+        mark.addEventListener("click", () => {
+          const card = document.getElementById("cite-card-" + idx);
+          if (card) {
+            card.classList.add("open");
+            card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            setStage("ground");
+          }
+        });
+        answerEl.appendChild(mark);
+        last = m.index + m[0].length;
+      }
+      answerEl.appendChild(document.createTextNode(raw.slice(last)));
+    }
+
+    function addRefusedBar(bot, reason, message) {
+      setStage("ground");
+      const bar = document.createElement("div");
+      bar.className = "refused-bar";
+      bar.textContent = "拒答 · " + (message || "根据现有资料无法回答") + "（" + reason + "）";
+      bot.root.insertBefore(bar, bot.answer);
+      bot.answer.remove();
+      bot.cites.remove();
+    }
+
+    function renderTracePanel(traceEl, traceId, events, extraMeta) {
+      setStage("trace");
+      const count = (events && events.length) || 0;
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "trace-toggle";
+      toggle.textContent = "▸ Trace · " + count + " events · " + (traceId || "-");
+      const body = document.createElement("div");
+      body.className = "trace-body";
+      if (extraMeta) {
+        const meta = document.createElement("div");
+        meta.className = "meta-line";
+        meta.textContent = extraMeta;
+        body.appendChild(meta);
+      }
+      (events || []).forEach((ev, i) => {
+        const step = document.createElement("div");
+        step.className = "trace-step";
+        const tool = ev.tool || ev.type || "event";
+        const dur = typeof ev.durationMs === "number" ? ev.durationMs + "ms" : "";
+        step.innerHTML = "<strong>#" + (i + 1) + " " + tool + "</strong> " + dur;
+        if (ev.inputSummary) {
+          const inp = document.createElement("div");
+          inp.textContent = "in: " + ev.inputSummary;
+          step.appendChild(inp);
+        }
+        if (ev.outputSummary) {
+          const out = document.createElement("div");
+          out.className = "obs";
+          out.textContent = "out: " + ev.outputSummary;
+          step.appendChild(out);
+        }
+        body.appendChild(step);
+      });
+      toggle.addEventListener("click", () => {
+        traceEl.classList.toggle("open");
+        const open = traceEl.classList.contains("open");
+        toggle.textContent = (open ? "▾" : "▸") + " Trace · " + count + " events · " + (traceId || "-");
+      });
+      traceEl.innerHTML = "";
+      traceEl.appendChild(toggle);
+      traceEl.appendChild(body);
+    }
+
+    async function loadTrace(traceId) {
+      const res = await fetch("/api/v1/trace/" + encodeURIComponent(traceId));
+      if (!res.ok) throw new Error("trace HTTP " + res.status);
+      return res.json();
+    }
+
+    async function loadGateway() {
+      try {
+        const res = await fetch("/api/v1/gateway");
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const data = await res.json();
+        gatewayEl.innerHTML =
+          "<span><b>baseUrl</b> " + data.baseUrl + "</span>" +
+          "<span><b>chat</b> " + data.chatModel + "</span>" +
+          "<span><b>embed</b> " + (data.embeddingModel || "-") + "</span>" +
+          (data.embeddingDim ? "<span><b>dim</b> " + data.embeddingDim + "</span>" : "");
+        statusEl.textContent = "gateway online";
+        statusEl.className = "status-pill ok";
+      } catch (e) {
+        gatewayEl.textContent = "网关不可用：" + e.message + "（请启动 LM Studio Server）";
+        statusEl.textContent = "gateway offline";
+        statusEl.className = "status-pill bad";
+      }
+    }
+
+    async function loadPrompt() {
+      try {
+        const res = await fetch("/api/v1/prompt");
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const data = await res.json();
+        promptSelect.innerHTML = "";
+        (data.versions || []).forEach((v) => {
+          const opt = document.createElement("option");
+          opt.value = v;
+          opt.textContent = v;
+          if (v === data.active) opt.selected = true;
+          promptSelect.appendChild(opt);
+        });
+        promptHint.textContent = "激活：" + data.active + " · 回滚栈 " + (data.historySize || 0);
+      } catch (e) {
+        promptHint.textContent = "Prompt API 不可用：" + e.message;
+      }
+    }
+
+    document.getElementById("promptApply").addEventListener("click", async () => {
+      setStage("generate");
+      const version = promptSelect.value;
+      const res = await fetch("/api/v1/prompt/activate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ version }),
+      });
+      if (!res.ok) {
+        addSystem("切换 Prompt 失败");
+        return;
+      }
+      await loadPrompt();
+      addSystem("已切换 Prompt → " + version);
+    });
+
+    document.getElementById("promptRollback").addEventListener("click", async () => {
+      const res = await fetch("/api/v1/prompt/rollback", { method: "POST" });
+      if (!res.ok) {
+        const t = await res.text();
+        addSystem("回滚失败：" + t);
+        return;
+      }
+      await loadPrompt();
+      addSystem("Prompt 已回滚到上一版本");
+    });
+
+    document.getElementById("modeSeg").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-mode]");
+      if (!btn) return;
+      mode = btn.dataset.mode;
+      document.querySelectorAll("#modeSeg button").forEach((b) => b.classList.toggle("on", b === btn));
+      modeHint.textContent = MODE_COPY[mode];
+      stageTitle.textContent = mode === "agent" ? "对话 · Agent" : "对话 · RAG";
+    });
+
+    ingestBtn.addEventListener("click", async () => {
+      setStage("ingest");
+      ingestBtn.disabled = true;
+      try {
+        const res = await fetch("/api/v1/ingest/samples", { method: "POST" });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const reports = await res.json();
+        const total = reports.reduce((s, r) => s + (r.chunkCount || 0), 0);
+        addSystem("灌入完成：" + reports.length + " 篇 / " + total + " 块 — "
+          + reports.map((r) => r.docId + "→" + r.chunkCount).join("，"));
+        stageMeta.textContent = "corpus ready";
+      } catch (e) {
+        addSystem("灌入失败：" + e.message + "（检查 PGVector）");
+      } finally {
+        ingestBtn.disabled = false;
+      }
+    });
+
+    document.getElementById("retrieveBtn").addEventListener("click", async () => {
+      setStage("retrieve");
+      const q = (retrieveQ.value || qEl.value || "").trim();
+      if (!q) {
+        retrieveOut.textContent = "请输入预览查询";
+        return;
+      }
+      retrieveOut.textContent = "检索中…";
+      try {
+        const res = await fetch("/api/v1/retrieve/modes?q=" + encodeURIComponent(q) + "&topK=5");
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const data = await res.json();
+        const lines = ["query: " + data.query, "defaultMode: " + data.defaultMode, ""];
+        (data.modes || []).forEach((m) => {
+          lines.push("== " + m.mode + " · hits=" + m.hitCount + " ==");
+          (m.hits || []).slice(0, 3).forEach((h) => {
+            lines.push("  #" + h.rank + " [" + h.channel + "] " + h.chunkId
+              + " score=" + (typeof h.score === "number" ? h.score.toFixed(4) : h.score));
+            lines.push("  " + (h.snippet || "").replace(/\s+/g, " ").slice(0, 120));
+          });
+          lines.push("");
+        });
+        retrieveOut.textContent = lines.join("\n");
+      } catch (e) {
+        retrieveOut.textContent = "失败：" + e.message;
+      }
+    });
+
+    async function streamAsk(question) {
+      setStage("retrieve");
+      addUserMsg(question);
+      const bot = addBotShell();
+      sendBtn.disabled = true;
+      stageMeta.textContent = "streaming…";
+      let refused = false;
+      let sawToken = false;
+      try {
+        const res = await fetch("/api/v1/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Accept": "text/event-stream" },
+          body: JSON.stringify({ question }),
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = "";
+        let eventName = "message";
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const parts = buf.split("\n");
+          buf = parts.pop() || "";
+          for (const line of parts) {
+            if (line.startsWith("event:")) eventName = line.slice(6).trim();
+            else if (line.startsWith("data:")) {
+              const data = line.slice(5).trim();
+              let payload = {};
+              try { payload = JSON.parse(data); } catch (_) {}
+              if (eventName === "token") {
+                if (!sawToken) { setStage("generate"); sawToken = true; }
+                bot.answer.textContent += payload.text || "";
+                chat.scrollTop = chat.scrollHeight;
+              } else if (eventName === "citation") {
+                setStage("ground");
+                addCiteCard(bot.cites, payload);
+              } else if (eventName === "refused") {
+                refused = true;
+                addRefusedBar(bot, payload.reason, payload.message);
+              } else if (eventName === "done") {
+                const meta = "p=" + (payload.promptTokens || 0)
+                  + " c=" + (payload.completionTokens || 0)
+                  + (payload.promptVersion ? " · " + payload.promptVersion : "");
+                stageMeta.textContent = meta;
+                if (payload.traceId) {
+                  try {
+                    const tr = await loadTrace(payload.traceId);
+                    renderTracePanel(bot.trace, payload.traceId, tr.events, meta);
+                  } catch (_) {
+                    renderTracePanel(bot.trace, payload.traceId, [], meta);
+                  }
+                }
+              }
+              eventName = "message";
+            }
+          }
+        }
+        if (!refused && !bot.answer.textContent) bot.answer.textContent = "(空响应)";
+        if (!refused && bot.answer.textContent) {
+          setStage("ground");
+          renderCiteMarks(bot.answer);
+        }
+      } catch (e) {
+        bot.answer.textContent = "请求失败：" + e.message;
+        stageMeta.textContent = "error";
+      } finally {
+        sendBtn.disabled = false;
+        qEl.focus();
+      }
+    }
+
+    async function runAgent(question) {
+      setStage("retrieve");
+      addUserMsg(question);
+      const bot = addBotShell();
+      sendBtn.disabled = true;
+      stageMeta.textContent = "agent running…";
+      try {
+        const res = await fetch("/api/v1/agent/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question }),
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const data = await res.json();
+        setStage("generate");
+        bot.answer.textContent = data.answer || "(空答案)";
+        const meta = "steps=" + ((data.steps && data.steps.length) || 0)
+          + (data.timedOut ? " timedOut" : "");
+        stageMeta.textContent = meta;
+        try {
+          const tr = await loadTrace(data.traceId);
+          renderTracePanel(bot.trace, data.traceId, tr.events, meta);
+          bot.trace.classList.add("open");
+          bot.trace.querySelector(".trace-toggle").textContent =
+            "▾ Trace · " + (tr.events || []).length + " events · " + data.traceId;
+        } catch (_) {
+          const fake = (data.steps || []).map((s) => ({
+            type: "agent_step",
+            tool: s.action,
+            durationMs: s.durationMs,
+            inputSummary: (s.thought || "") + " | " + (s.actionInput || ""),
+            outputSummary: s.observation || "",
+          }));
+          renderTracePanel(bot.trace, data.traceId, fake, meta);
+          bot.trace.classList.add("open");
+        }
+      } catch (e) {
+        bot.answer.textContent = "Agent 失败：" + e.message;
+        stageMeta.textContent = "error";
+      } finally {
+        sendBtn.disabled = false;
+        qEl.focus();
+      }
+    }
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const q = qEl.value.trim();
+      if (!q || sendBtn.disabled) return;
+      qEl.value = "";
+      if (mode === "agent") runAgent(q);
+      else streamAsk(q);
+    });
+
+    qEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        form.requestSubmit();
+      }
+    });
+
+    loadGateway();
+    loadPrompt();
+  </script>
+</body>
+</html>

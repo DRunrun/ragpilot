@@ -7,9 +7,11 @@ alwaysApply: true
 # RagPilot Cursor Rules
 
 - Follow root `AGENTS.md` and `docs/m1-spec.md` before adding features.
+- Write ALL code comments in Chinese (中文注释). Every class/interface needs a Javadoc saying what it is, where it sits in the RAG pipeline, and why it exists. Public methods document params and edge cases. Explain non-obvious algorithm steps and workarounds inline. See `docs/coding-standards.md` section 〇.
 - `ragpilot-core` must NOT depend on Spring.
-- Do not implement Defer items (console UI, NL2SQL, LangChain4j) unless explicitly asked.
-- Prefer extending existing packages under `com.ragpilot.*` over new top-level folders.
+- UI: keep `static/index.html` as transitional demo; Admin is `ragpilot-admin-ui` (Vue3 + Element Plus) per `docs/admin-console-spec.md`. Do **not** scaffold Admin code until the user says `开始 ADM-0.1`.
+- Admin V1: no users/RBAC; config via DB overlay only; no NL2SQL / LangChain4j as main stack.
+- Prefer extending existing packages under `com.ragpilot.*` over new top-level folders (exception: approved `ragpilot-admin-ui/`).
 - Domain contracts use typed records (`AskResult`, `Citation`), not raw maps.
 - After changing chunk/retrieval/prompt behavior, note evaluation impact in the PR/commit body.
 - Keep changes scoped: one concern per change set.
