@@ -9,7 +9,7 @@ spring:
   # sslmode=disable：非 SSL 的 PG 上若走默认 SSL 协商，会 EOF 导致「尝试连线已失败」。
   # 注意：Spring AI PgVectorStore 启动时 afterPropertiesSet 会建连，PG 必须可达。
   datasource:
-    url: jdbc:postgresql://${RAGPILOT_DB_HOST:127.0.0.1}:${RAGPILOT_DB_PORT:5433}/ragpilot?sslmode=disable
+    url: jdbc:postgresql://${RAGPILOT_DB_HOST:121.43.104.199}:${RAGPILOT_DB_PORT:5433}/ragpilot?sslmode=disable
     username: ${RAGPILOT_DB_USER:ragpilot}
     password: ${RAGPILOT_DB_PASSWORD:ragpilot}
     hikari:
@@ -65,6 +65,11 @@ ragpilot:
     temperature: 0.0 # 评测可复现
     # F4.2：整次流式生成墙钟超时（秒），超时走 refused 降级而非 500
     timeout-seconds: 60
+  # 多轮检索查询改写：用 LLM 把带指代的问题改写成独立检索问句，超时/失败回退原文
+  query-rewrite:
+    enabled: true
+    timeout-seconds: 8   # 本地小模型改写在 2s 量级；8s 兜底不拖首包
+    max-turns: 3         # 指代通常 1、2 轮内可解，更多只稀释提示词
   # F4.1：当前激活的 Prompt 版本（classpath prompts/ 下）
   prompt:
     active: rag-v1

@@ -156,7 +156,8 @@ public final class EvalRunner {
                 mean(faiths),
                 mean(relevances),
                 refuseExpected == 0 ? null : (double) refuseCorrect / refuseExpected,
-                List.copyOf(cases)
+                List.copyOf(cases),
+                null
         );
     }
 
@@ -173,6 +174,10 @@ public final class EvalRunner {
 
     /**
      * 全量报告摘要 + 逐题明细。
+     *
+     * <p>label：消融臂标识（如 {@code chunk=HEADING/512/64}）。同一检索模式下
+     * 换分块参数重灌再评，两个臂的 mode 相同、靠 label 区分，否则报告无法归因。
+     * 旧 JSON 报告无此字段，反序列化后为 null，向后兼容。
      */
     public record EvalReport(
             String mode,
@@ -184,8 +189,14 @@ public final class EvalRunner {
             Double faithfulness,
             Double answerRelevancy,
             Double refusalAccuracy,
-            List<EvalCaseResult> cases
+            List<EvalCaseResult> cases,
+            String label
     ) {
+        /** 复制并贴上消融臂标签（CLI 重灌场景在 runner 外部打标，不动评测核心逻辑）。 */
+        public EvalReport withLabel(String newLabel) {
+            return new EvalReport(mode, topK, generatedAt, questionCount, recallAtK, mrr,
+                    faithfulness, answerRelevancy, refusalAccuracy, cases, newLabel);
+        }
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.ragpilot.core.agent.tools;
 
 import com.ragpilot.core.agent.Tool;
+import com.ragpilot.core.agent.ToolObservation;
 import com.ragpilot.core.domain.RetrievedChunk;
 import com.ragpilot.core.retrieval.Retriever;
 
@@ -66,17 +67,30 @@ public final class KnowledgeSearchTool implements Tool {
     }
 
     /**
-     * 执行检索。
+     * 执行检索（纯文本视图）。
      *
      * @param input JSON {@code {"query":"...","topK":5}} 或纯文本查询
      * @return 可读的命中摘要；无命中返回固定提示
      */
     @Override
-    public String execute(String input) {
+    public String execute(String input) throws Exception {
+        return observe(input).text();
+    }
+
+    /**
+     * 结构化执行：把命中块随观察结果带出，供答案合成复用、避免二次检索。
+     *
+     * @param input JSON 或纯文本查询
+     * @return 文本摘要 + 命中块（无命中时 chunks 为空列表）
+     */
+    @Override
+    public ToolObservation observe(String input) {
         Parsed parsed = parse(input);
         List<RetrievedChunk> hits = retriever.retrieve(parsed.query(), parsed.topK());
         if (hits == null || hits.isEmpty()) {
-            return "NO_HITS: knowledge base returned no passages for query=" + parsed.query();
+            return new ToolObservation(
+                    "NO_HITS: knowledge base returned no passages for query=" + parsed.query(),
+                    List.of());
         }
         StringBuilder sb = new StringBuilder();
         sb.append("HITS=").append(hits.size()).append('\n');
@@ -90,7 +104,7 @@ public final class KnowledgeSearchTool implements Tool {
                     .append(" score=").append(String.format(java.util.Locale.ROOT, "%.4f", hit.score()))
                     .append('\n').append(snippet).append('\n');
         }
-        return sb.toString();
+        return new ToolObservation(sb.toString(), hits);
     }
 
     private Parsed parse(String input) {

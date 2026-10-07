@@ -54,8 +54,11 @@ public class AblationReportCommand implements ApplicationRunner {
         for (String part : inputs.split(",")) {
             Path path = Path.of(part.strip());
             EvalRunner.EvalReport report = objectMapper.readValue(path.toFile(), EvalRunner.EvalReport.class);
-            String setup = report.mode() == null ? path.getFileName().toString() : report.mode();
-            String notes = switch (setup) {
+            String mode = report.mode() == null ? path.getFileName().toString() : report.mode();
+            // 分块消融臂：同 mode 不同分块参数的两个臂靠 label 区分，否则表里两行无法归因
+            String setup = report.label() == null || report.label().isBlank()
+                    ? mode : mode + " · " + report.label();
+            String notes = switch (mode) {
                 case "VECTOR" -> "baseline vector-only";
                 case "HYBRID" -> "BM25 + vector + RRF";
                 case "HYBRID_RERANK" -> "hybrid + rerank";

@@ -26,7 +26,8 @@ public record RagPilotProperties(
         Retrieval retrieval,
         Generation generation,
         Embedding embedding,
-        Refusal refusal
+        Refusal refusal,
+        QueryRewrite queryRewrite
 ) {
 
     /** 紧凑构造器：任何嵌套段缺省时给出整套默认值，保证 yml 里可以只写要覆盖的键。 */
@@ -36,6 +37,7 @@ public record RagPilotProperties(
         generation = generation == null ? new Generation(null, null) : generation;
         embedding = embedding == null ? new Embedding(null) : embedding;
         refusal = refusal == null ? new Refusal(null) : refusal;
+        queryRewrite = queryRewrite == null ? new QueryRewrite(null, null, null) : queryRewrite;
     }
 
     /**
@@ -122,6 +124,26 @@ public record RagPilotProperties(
     public record Refusal(Boolean emptyHits) {
         public Refusal {
             emptyHits = emptyHits == null ? Boolean.TRUE : emptyHits;
+        }
+    }
+
+    /**
+     * 多轮检索查询改写配置。对应 yml 键 {@code ragpilot.query-rewrite.*}。
+     *
+     * <p>多轮会话里用 LLM 把带指代的问题改写成独立检索问句，
+     * 超时/失败回退原文（见 core QueryRewriter）。
+     *
+     * @param enabled        是否启用改写；false 时检索直接用原问题（旧行为）
+     * @param timeoutSeconds 改写调用超时秒数；默认 8——本地小模型改写在 2s 量级，
+     *                       8s 足够又不至于拖垮首包
+     * @param maxTurns       参与改写的最历史轮数；默认 3——指代通常 1、2 轮内可解，
+     *                       更多只稀释提示词
+     */
+    public record QueryRewrite(Boolean enabled, Integer timeoutSeconds, Integer maxTurns) {
+        public QueryRewrite {
+            enabled = enabled == null ? Boolean.TRUE : enabled;
+            timeoutSeconds = timeoutSeconds == null ? 8 : timeoutSeconds;
+            maxTurns = maxTurns == null ? 3 : maxTurns;
         }
     }
 }

@@ -35,9 +35,12 @@ public class IngestionConfig {
     /**
      * 写入端口实现：Spring AI PGVector 适配器。
      * VectorStore 由 spring-ai-starter-vector-store-pgvector 自动装配。
+     *
+     * <p>返回类型用具体类而不是 ChunkWriter 端口：分块消融 CLI 需要
+     * {@code deleteByDocId}（重灌前清旧块），端口契约不为此扩面。
      */
     @Bean
-    ChunkWriter chunkWriter(VectorStore vectorStore) {
+    SpringAiVectorStoreWriter chunkWriter(VectorStore vectorStore) {
         return new SpringAiVectorStoreWriter(vectorStore);
     }
 

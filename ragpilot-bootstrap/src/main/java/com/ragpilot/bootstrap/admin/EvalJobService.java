@@ -250,7 +250,7 @@ public class EvalJobService {
         if (prompt == null) {
             return Optional.empty();
         }
-        String answer = generator.stream(prompt).collectList().blockOptional()
+        String answer = generator.streamTokens(prompt).collectList().blockOptional()
                 .map(tokens -> String.join("", tokens))
                 .orElse("");
         if (refusalPolicy.checkAfterGeneration(answer, "eval").isPresent()) {

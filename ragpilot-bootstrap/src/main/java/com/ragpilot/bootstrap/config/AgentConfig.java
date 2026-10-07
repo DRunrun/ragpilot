@@ -69,17 +69,15 @@ public class AgentConfig {
     }
 
     /**
-     * Agent finish 前的答案合成：再检索 + PromptBuilder + Generator（会真实调用 LM Studio）。
+     * Agent finish 前的答案合成：直接复用 knowledge_search 首次检索的块 + Prompt + Generator，
+     * 不再二次检索（会真实调用 LM Studio）。
      */
     @Bean
     AnswerSynthesizer answerSynthesizer(
-            ModeAwareRetriever retriever,
             PromptBuilder promptBuilder,
-            Generator generator,
-            RagPilotProperties props
+            Generator generator
     ) {
-        return new RagPromptAnswerSynthesizer(
-                retriever, promptBuilder, generator, props.retrieval().topK());
+        return new RagPromptAnswerSynthesizer(promptBuilder, generator);
     }
 
     @Bean

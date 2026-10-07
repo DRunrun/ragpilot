@@ -7,6 +7,7 @@ import com.ragpilot.core.generation.CitationAssembler;
 import com.ragpilot.core.generation.Generator;
 import com.ragpilot.core.generation.PromptBuilder;
 import com.ragpilot.core.generation.RefusalPolicy;
+import com.ragpilot.core.retrieval.QueryRewriter;
 import com.ragpilot.ops.prompt.PromptRegistry;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -75,5 +76,14 @@ public class GenerationConfig {
             @Value("${ragpilot.generation.timeout-seconds:60}") long timeoutSeconds
     ) {
         return new ResilientGenerator(lmStudioGenerator, Duration.ofSeconds(timeoutSeconds));
+    }
+
+    /**
+     * 多轮检索的查询改写器（复用主链路 Generator，模型热切换同步生效）。
+     * 超时口径集中到 ragpilot.query-rewrite.*，禁止散落魔法数。
+     */
+    @Bean
+    QueryRewriter queryRewriter(Generator generator, RagPilotProperties props) {
+        return new QueryRewriter(generator, Duration.ofSeconds(props.queryRewrite().timeoutSeconds()));
     }
 }

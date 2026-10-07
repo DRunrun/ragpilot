@@ -11,9 +11,11 @@ import com.ragpilot.core.domain.AskResult;
 import com.ragpilot.core.domain.Citation;
 import com.ragpilot.core.domain.RetrievedChunk;
 import com.ragpilot.core.generation.CitationAssembler;
+import com.ragpilot.core.generation.GenerationEvent;
 import com.ragpilot.core.generation.Generator;
 import com.ragpilot.core.generation.PromptBuilder;
 import com.ragpilot.core.generation.RefusalPolicy;
+import com.ragpilot.core.retrieval.QueryRewriter;
 import com.ragpilot.ops.token.TokenMeter;
 import com.ragpilot.ops.trace.TraceEvent;
 import com.ragpilot.ops.trace.TraceIds;
@@ -60,6 +62,9 @@ public class AskController {
     private final ObjectMapper objectMapper;
     private final TraceRecorder traceRecorder;
     private final TokenMeter tokenMeter;
+    private final QueryRewriter queryRewriter;
+    private final boolean queryRewriteEnabled;
+    private final int queryRewriteMaxTurns;
     private final int defaultTopK;
 
     public AskController(
@@ -73,6 +78,7 @@ public class AskController {
             ObjectMapper objectMapper,
             TraceRecorder traceRecorder,
             TokenMeter tokenMeter,
+            QueryRewriter queryRewriter,
             com.ragpilot.bootstrap.config.RagPilotProperties props
     ) {
         this.retriever = retriever;
@@ -85,6 +91,9 @@ public class AskController {
         this.objectMapper = objectMapper;
         this.traceRecorder = traceRecorder;
         this.tokenMeter = tokenMeter;
+        this.queryRewriter = queryRewriter;
+        this.queryRewriteEnabled = props.queryRewrite().enabled();
+        this.queryRewriteMaxTurns = props.queryRewrite().maxTurns();
         this.defaultTopK = props.retrieval().topK();
     }
 
@@ -115,13 +124,11 @@ public class AskController {
     private PreparedAsk prepare(AskRequest request, int topK, String traceId) {
         String originalQuestion = request.question();
         String sessionId = blankToNull(request.sessionId());
-        // 先拼历史再写入本轮用户消息，避免历史里重复当前问句
+        // 生成侧保留历史拼接（追问需要上下文组织语气）；都在写入本轮用户消息之前取，避免历史重复当前问句
         String promptQuestion = originalQuestion;
         if (sessionId != null) {
             promptQuestion = chatSessionService.buildContextualQuestion(
                     sessionId, originalQuestion, 5);
-            chatSessionService.appendMessage(
-                    sessionId, "user", originalQuestion, null, traceId, null, null);
         }
 
         List<String> kbIds = knowledgeFilterResolver.resolveAllowedKbIds(request.resolvedKnowledgeBaseId());
@@ -130,9 +137,34 @@ public class AskController {
 
         traceRecorder.start(traceId, "ask");
         long t0 = System.currentTimeMillis();
-        // 检索用原问（向量更准）；生成用带历史的问题文本
+        // 检索侧：多轮时用 LLM 把指代/省略改写成独立问句（拼接历史会稀释向量语义）；
+        // 改写超时/异常回退原文，单轮无历史不发 LLM 调用（见 core QueryRewriter）
+        String searchQuery = originalQuestion;
+        if (sessionId != null) {
+            if (queryRewriteEnabled) {
+                String historyText = chatSessionService.recentHistoryText(sessionId, queryRewriteMaxTurns);
+                QueryRewriter.RewriteResult rewrite = queryRewriter.rewrite(historyText, originalQuestion);
+                searchQuery = rewrite.query();
+                Map<String, Object> rewriteMeta = new LinkedHashMap<>();
+                rewriteMeta.put("rewritten", rewrite.rewritten());
+                rewriteMeta.put("fallbackReason", rewrite.fallbackReason() == null ? "" : rewrite.fallbackReason());
+                traceRecorder.record(traceId, new TraceEvent(
+                        "query_rewrite",
+                        System.currentTimeMillis(),
+                        rewrite.durationMs(),
+                        "queryRewriter",
+                        TraceRecorder.summarize(originalQuestion),
+                        TraceRecorder.summarize(searchQuery),
+                        null,
+                        null,
+                        rewriteMeta
+                ));
+            }
+            chatSessionService.appendMessage(
+                    sessionId, "user", originalQuestion, null, traceId, null, null);
+        }
         List<RetrievedChunk> hits = retriever.retrieve(
-                originalQuestion, topK, null, filterExpr, sqlKbIds);
+                searchQuery, topK, null, filterExpr, sqlKbIds);
         Map<String, Object> retrievalMeta = new LinkedHashMap<>();
         retrievalMeta.put("hitCount", hits.size());
         retrievalMeta.put("knowledgeBaseIds", kbIds);
@@ -142,7 +174,7 @@ public class AskController {
                 System.currentTimeMillis(),
                 System.currentTimeMillis() - t0,
                 "retriever",
-                TraceRecorder.summarize(originalQuestion),
+                TraceRecorder.summarize(searchQuery),
                 TraceRecorder.summarize("hits=" + hits.size()),
                 null,
                 null,
@@ -192,11 +224,21 @@ public class AskController {
         StringBuilder answerBuffer = new StringBuilder();
         AtomicBoolean degraded = new AtomicBoolean(false);
         AtomicReference<AskResult> degradedResult = new AtomicReference<>();
+        // 用量随本次订阅走（Completed 事件携带），不再读生成器实例状态——并发请求计量不串号
+        AtomicReference<Generator.AskTokenUsage> streamUsage =
+                new AtomicReference<>(Generator.AskTokenUsage.ZERO);
 
         Flux<ServerSentEvent<String>> tokenEvents = generator.stream(prepared.prompt())
-                .map(token -> {
-                    answerBuffer.append(token);
-                    return sse("token", json(Map.of("text", token)), traceId);
+                .mapNotNull(event -> switch (event) {
+                    case GenerationEvent.Token t -> {
+                        answerBuffer.append(t.text());
+                        yield sse("token", json(Map.of("text", t.text())), traceId);
+                    }
+                    case GenerationEvent.Completed c -> {
+                        streamUsage.set(c.usage());
+                        // 结束事件不直接出 SSE，统一并进 done 事件
+                        yield null;
+                    }
                 })
                 .onErrorResume(err -> {
                     degraded.set(true);
@@ -230,7 +272,7 @@ public class AskController {
                 return sse("refused", refusedPayload(refused), traceId);
             }
             citationAssembler.validate(answer, prepared.citations());
-            Generator.AskTokenUsage usage = generator.lastUsage();
+            Generator.AskTokenUsage usage = streamUsage.get();
             tokenMeter.add(traceId, usage.prompt(), usage.completion());
             TokenMeter.Usage metered = tokenMeter.usage(traceId);
             double cost = tokenMeter.estimateCostUsd(traceId);

@@ -29,4 +29,19 @@ public interface Tool {
      * @throws Exception 失败时抛出，由 ReActAgent 重试
      */
     String execute(String input) throws Exception;
+
+    /**
+     * 结构化执行：文本观察结果 + 可复用的检索证据。
+     *
+     * <p>检索类工具（如 knowledge_search）应重写本方法把命中块带出，
+     * 下游答案合成就能复用首次检索结果、不再重检一遍；
+     * 非检索工具默认委托 {@link #execute}，零改动成本。
+     *
+     * @param input 工具入参
+     * @return 观察结果；不得为 null
+     * @throws Exception 失败时抛出，由 ReActAgent 重试
+     */
+    default ToolObservation observe(String input) throws Exception {
+        return ToolObservation.of(execute(input));
+    }
 }

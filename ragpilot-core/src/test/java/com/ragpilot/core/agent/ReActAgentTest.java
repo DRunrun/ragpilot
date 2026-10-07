@@ -32,7 +32,7 @@ class ReActAgentTest {
         List<String> toolCalls = new ArrayList<>();
         ReActAgent.ToolInvoker tools = (name, input) -> {
             toolCalls.add(name + ":" + input);
-            return "命中：Instantiation → … → destroy";
+            return ToolObservation.of("命中：Instantiation → … → destroy");
         };
 
         ReActAgent agent = new ReActAgent(planner, tools, 5, Duration.ofSeconds(2));
@@ -52,7 +52,7 @@ class ReActAgentTest {
                 new ReActAgent.Decision("调慢工具", "slow", "x");
         ReActAgent.ToolInvoker tools = (name, input) -> {
             Thread.sleep(500);
-            return "too late";
+            return ToolObservation.of("too late");
         };
 
         ReActAgent agent = new ReActAgent(planner, tools, 5, Duration.ofMillis(50));
@@ -78,7 +78,7 @@ class ReActAgentTest {
             if (invokes.getAndIncrement() == 0) {
                 throw new IllegalStateException("boom");
             }
-            return "recovered";
+            return ToolObservation.of("recovered");
         };
 
         ReActAgent.AgentResult result = new ReActAgent(planner, tools, 5, Duration.ofSeconds(2))
@@ -95,7 +95,7 @@ class ReActAgentTest {
     void 触达maxSteps未finish() {
         ReActAgent.DecisionMaker planner = (q, history) ->
                 new ReActAgent.Decision("再搜", "search", "x");
-        ReActAgent.ToolInvoker tools = (name, input) -> "obs";
+        ReActAgent.ToolInvoker tools = (name, input) -> ToolObservation.of("obs");
 
         ReActAgent.AgentResult result = new ReActAgent(planner, tools, 3, Duration.ofSeconds(2))
                 .run("loop?");

@@ -15,9 +15,9 @@ class MarkdownReporterTest {
     @Test
     void 生成含固定表头与百分比的报告() {
         EvalRunner.EvalReport vector = new EvalRunner.EvalReport(
-                "VECTOR", 5, "t0", 50, 0.80, 0.75, 0.70, 0.72, 0.90, List.of());
+                "VECTOR", 5, "t0", 50, 0.80, 0.75, 0.70, 0.72, 0.90, List.of(), null);
         EvalRunner.EvalReport hybrid = new EvalRunner.EvalReport(
-                "HYBRID", 5, "t1", 50, 0.88, 0.82, 0.74, 0.76, 0.91, List.of());
+                "HYBRID", 5, "t1", 50, 0.88, 0.82, 0.74, 0.76, 0.91, List.of(), "chunk=FIXED/256/32");
 
         String md = new MarkdownReporter().render(List.of(
                 new MarkdownReporter.SetupRow("VECTOR", vector, "baseline"),

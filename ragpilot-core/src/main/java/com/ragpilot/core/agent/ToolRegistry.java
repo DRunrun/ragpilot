@@ -39,11 +39,12 @@ public final class ToolRegistry implements ReActAgent.ToolInvoker {
     }
 
     @Override
-    public String invoke(String name, String input) throws Exception {
+    public ToolObservation invoke(String name, String input) throws Exception {
         Tool tool = byName.get(name);
         if (tool == null) {
             throw new IllegalArgumentException("unknown tool: " + name);
         }
-        return tool.execute(input);
+        // 走 observe()：检索类工具能顺带带出结构化命中块，非检索工具默认纯文本
+        return tool.observe(input);
     }
 }

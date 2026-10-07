@@ -1,5 +1,6 @@
 package com.ragpilot.bootstrap.resilience;
 
+import com.ragpilot.core.generation.GenerationEvent;
 import com.ragpilot.core.generation.Generator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,7 +35,7 @@ public final class ResilientGenerator implements Generator {
     }
 
     @Override
-    public Flux<String> stream(String prompt) {
+    public Flux<GenerationEvent> stream(String prompt) {
         return delegate.stream(prompt)
                 .timeout(timeout)
                 .onErrorMap(TimeoutException.class, e -> {
@@ -55,11 +56,6 @@ public final class ResilientGenerator implements Generator {
                             err
                     );
                 });
-    }
-
-    @Override
-    public AskTokenUsage lastUsage() {
-        return delegate.lastUsage();
     }
 
     /** 测试/诊断用。 */

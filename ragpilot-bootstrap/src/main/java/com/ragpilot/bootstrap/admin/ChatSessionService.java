@@ -183,6 +183,32 @@ public class ChatSessionService {
         return sb.toString();
     }
 
+    /**
+     * 最近若干轮的纯文本历史（每行 {@code role: content}），供检索侧查询改写（QueryRewriter）用。
+     *
+     * <p>与 {@link #buildContextualQuestion} 的区别：这里只要事实性历史行，
+     * 不带「请结合历史理解」一类指令包装；每条截断到 300 字——
+     * 改写只需要指代线索（实体名/主题），长答案全文对改写是噪声还烧 token。
+     *
+     * @param sessionId 会话 id
+     * @param maxTurns  保留轮数（一轮 = user + assistant 两条）
+     * @return 历史文本；无历史返回空串（调用侧据此跳过改写）
+     */
+    public String recentHistoryText(String sessionId, int maxTurns) {
+        List<MessageView> all = listMessages(sessionId);
+        int keep = Math.max(maxTurns, 1) * 2;
+        List<MessageView> recent = all.size() <= keep ? all : all.subList(all.size() - keep, all.size());
+        StringBuilder sb = new StringBuilder();
+        for (MessageView m : recent) {
+            String content = m.content() == null ? "" : m.content().replace('\n', ' ');
+            if (content.length() > 300) {
+                content = content.substring(0, 300) + "…";
+            }
+            sb.append(m.role()).append(": ").append(content).append('\n');
+        }
+        return sb.toString().strip();
+    }
+
     public Map<String, Object> toListPayload(List<SessionView> items) {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("items", items);

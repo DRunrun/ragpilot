@@ -1,6 +1,7 @@
 package com.ragpilot.bootstrap.ingest;
 
 import com.ragpilot.core.domain.TextChunk;
+import com.ragpilot.core.ingestion.CjkBigramTokenizer;
 import com.ragpilot.core.ingestion.ChunkWriter;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -36,6 +37,13 @@ public class SpringAiVectorStoreWriter implements ChunkWriter {
      */
     public static final String CHUNK_ID_KEY = "chunkId";
 
+    /**
+     * metadata 键：中文 bigram 分词结果（仅含中文的块写入）。
+     * content_tsv 生成列优先用它，让 simple 配置能命中中文问句；
+     * 纯英文块不写（null），生成列回退原 regexp_replace 表达式，英文召回零回归。
+     */
+    public static final String SEARCH_TOKENS_KEY = "searchTokens";
+
     private final VectorStore vectorStore;
 
     public SpringAiVectorStoreWriter(VectorStore vectorStore) {
@@ -60,6 +68,23 @@ public class SpringAiVectorStoreWriter implements ChunkWriter {
     }
 
     /**
+     * 按 docId 删除该文档全部存量块（metadata 过滤，走 Spring AI 的 filter 表达式）。
+     *
+     * <p>为什么需要：分块消融臂要对同一语料换参数<b>重灌</b>；而 Document.id 是随机
+     * UUID，upsert 碰不到旧行，不先删则新旧块共存、指标被脏数据污染。
+     *
+     * @param docId 业务文档 id（MarkdownParser 按文件名生成，重灌时稳定可复现）
+     */
+    public void deleteByDocId(String docId) {
+        if (docId == null || docId.isBlank()) {
+            return;
+        }
+        // 转义单引号，防破坏 filter 表达式（PGVector 侧是字符串拼接解析）
+        String escaped = docId.replace("'", "\\'");
+        vectorStore.delete("docId == '" + escaped + "'");
+    }
+
+    /**
      * 领域对象 → Spring AI Document。
      *
      * <p>Document.id 用随机 UUID（PGVector 主键约束）；业务 {@code chunkId}/{@code docId}
@@ -71,6 +96,11 @@ public class SpringAiVectorStoreWriter implements ChunkWriter {
         metadata.put(CHUNK_ID_KEY, chunk.id());
         // 原文留给检索后的 Prompt/Citation；向量化用带前缀的 text
         metadata.put(RAW_CONTENT_KEY, chunk.content());
+        // 含中文的块额外存 bigram 分词，供全文检索生成列使用（见 SEARCH_TOKENS_KEY）
+        String searchTokens = CjkBigramTokenizer.tokenizeForIndex(chunk.content());
+        if (searchTokens != null) {
+            metadata.put(SEARCH_TOKENS_KEY, searchTokens);
+        }
         return Document.builder()
                 .id(UUID.randomUUID().toString())
                 .text(DOCUMENT_PREFIX + chunk.content())

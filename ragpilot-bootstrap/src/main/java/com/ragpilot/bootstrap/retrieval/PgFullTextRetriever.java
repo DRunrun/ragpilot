@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ragpilot.bootstrap.ingest.SpringAiVectorStoreWriter;
 import com.ragpilot.core.domain.RetrievedChunk;
 import com.ragpilot.core.domain.TextChunk;
+import com.ragpilot.core.ingestion.CjkBigramTokenizer;
 import com.ragpilot.core.retrieval.Retriever;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,6 +27,11 @@ import java.util.Map;
  * 直接 JDBC 查 {@code content_tsv} 列，保持适配器边界清晰。
  *
  * <p>分数口径：{@code ts_rank}，越大越相关；channel 标记为 {@link RetrievedChunk.Channel#BM25}。
+ *
+ * <p>中文召回优化：旧版 {@code plainto_tsquery} 在 simple 配置下整句汉字糊成一个
+ * token，中文问句几乎永不命中。现在查询侧用 {@link CjkBigramTokenizer} 切成
+ * bigram/拉丁 token 拼 {@code to_tsquery}（OR 语义），与摄入侧写入的
+ * {@code metadata.searchTokens} 同口径；英文精确词召回不受影响。
  */
 public class PgFullTextRetriever implements Retriever {
 
@@ -34,16 +40,16 @@ public class PgFullTextRetriever implements Retriever {
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     /**
-     * 全文检索 SQL：simple 配置 + plainto_tsquery。
+     * 全文检索 SQL：to_tsquery('simple', ?) 由 Java 侧拼好 OR token 表达式。
      * 命中文本优先 rawContent，避免把 search_document: 前缀带进 Prompt。
      */
     private static final String SEARCH_SQL = """
             SELECT id::text AS id,
                    coalesce(metadata->>'rawContent', content) AS body,
                    metadata::text AS metadata_json,
-                   ts_rank(content_tsv, plainto_tsquery('simple', ?)) AS rank_score
+                   ts_rank(content_tsv, to_tsquery('simple', ?)) AS rank_score
             FROM vector_store
-            WHERE content_tsv @@ plainto_tsquery('simple', ?)
+            WHERE content_tsv @@ to_tsquery('simple', ?)
             ORDER BY rank_score DESC
             LIMIT ?
             """;
@@ -52,9 +58,9 @@ public class PgFullTextRetriever implements Retriever {
             SELECT id::text AS id,
                    coalesce(metadata->>'rawContent', content) AS body,
                    metadata::text AS metadata_json,
-                   ts_rank(content_tsv, plainto_tsquery('simple', ?)) AS rank_score
+                   ts_rank(content_tsv, to_tsquery('simple', ?)) AS rank_score
             FROM vector_store
-            WHERE content_tsv @@ plainto_tsquery('simple', ?)
+            WHERE content_tsv @@ to_tsquery('simple', ?)
               AND metadata->>'knowledgeBaseId' = ANY(?)
             ORDER BY rank_score DESC
             LIMIT ?
@@ -90,14 +96,21 @@ public class PgFullTextRetriever implements Retriever {
         int k = Math.max(topK, 1);
         String q = query.strip();
 
+        // 查询侧同口径分词：中文切 bigram、拉丁词保留，拼 OR 表达式；切不出 token 直接空结果
+        String tsQuery = CjkBigramTokenizer.toTsQuery(q);
+        if (tsQuery == null) {
+            log.info("Full-text retrieval: no indexable tokens for query='{}'", q);
+            return List.of();
+        }
+
         List<RetrievedChunk> rows;
         if (kbIds == null || kbIds.isEmpty()) {
-            rows = jdbcTemplate.query(SEARCH_SQL, keywordRowMapper(), q, q, k);
+            rows = jdbcTemplate.query(SEARCH_SQL, keywordRowMapper(), tsQuery, tsQuery, k);
         } else {
             rows = jdbcTemplate.query(con -> {
                 var ps = con.prepareStatement(SEARCH_SQL_KB);
-                ps.setString(1, q);
-                ps.setString(2, q);
+                ps.setString(1, tsQuery);
+                ps.setString(2, tsQuery);
                 ps.setArray(3, con.createArrayOf("varchar", kbIds.toArray()));
                 ps.setInt(4, k);
                 return ps;

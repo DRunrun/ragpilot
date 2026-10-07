@@ -12,6 +12,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -24,9 +25,9 @@ class KnowledgeSearchToolTest {
 
     @Test
     void Agent自主先检索再作答() {
-        AtomicBoolean retrieved = new AtomicBoolean(false);
+        AtomicInteger retrieveCount = new AtomicInteger(0);
         Retriever retriever = (query, topK) -> {
-            retrieved.set(true);
+            retrieveCount.incrementAndGet();
             TextChunk chunk = new TextChunk(
                     "spring-bean-lifecycle#0",
                     "spring-bean-lifecycle",
@@ -40,11 +41,13 @@ class KnowledgeSearchToolTest {
         KnowledgeSearchTool search = new KnowledgeSearchTool(retriever, 5);
         ToolRegistry registry = new ToolRegistry(List.of(search));
         AtomicBoolean synthesized = new AtomicBoolean(false);
-        // 单测不连 LLM：合成器断言收到证据后返回组织过的答案
+        // 单测不连 LLM：合成器断言收到结构化证据（首次检索的块直接复用，不再二次检索）
         ReActAgent agent = new ReActAgent(
                 new KnowledgeFirstDecisionMaker(registry, (q, evidence) -> {
                     synthesized.set(true);
-                    assertTrue(evidence.contains("HITS="), "应变工具 Observation");
+                    assertEquals(1, evidence.size(), "应复用首次检索命中的 1 个块");
+                    assertTrue(evidence.get(0).chunk().content().contains("Instantiation"),
+                            "证据应是 knowledge_search 的命中块而非文本");
                     return "模型整理：Instantiation → Populate → destroy";
                 }),
                 registry,
@@ -54,7 +57,7 @@ class KnowledgeSearchToolTest {
 
         ReActAgent.AgentResult result = agent.run("Spring Bean 生命周期有哪些阶段？");
 
-        assertTrue(retrieved.get(), "应自主调用检索工具");
+        assertEquals(1, retrieveCount.get(), "全链路只应检索一次（消除二次检索）");
         assertTrue(synthesized.get(), "检索后应调用答案合成器（生产侧接 LLM）");
         assertEquals(2, result.steps().size());
         assertEquals(KnowledgeSearchTool.NAME, result.steps().get(0).action());

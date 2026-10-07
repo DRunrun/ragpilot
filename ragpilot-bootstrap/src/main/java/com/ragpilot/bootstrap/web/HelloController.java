@@ -1,6 +1,7 @@
 package com.ragpilot.bootstrap.web;
 
 import com.ragpilot.bootstrap.generation.LmStudioGenerator;
+import com.ragpilot.core.generation.GenerationEvent;
 import com.ragpilot.ops.trace.TraceIds;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
@@ -60,6 +61,8 @@ public class HelloController {
         Flux<ServerSentEvent<String>> tokens = generator
                 // 自检口放开 reasoning：Qwen 思考模型只输出 reasoning 时也能看到字
                 .stream(q, true)
+                // 只要正文事件；Completed 在本自检口不展示
+                .mapNotNull(GenerationEvent::tokenTextOrNull)
                 .map(text -> sse("token", text, traceId))
                 // 错误转成 error 事件，不让流断在客户端手里
                 .onErrorResume(err -> Mono.just(sse(

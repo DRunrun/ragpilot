@@ -1,6 +1,7 @@
 package com.ragpilot.core.agent;
 
 import com.ragpilot.core.agent.tools.KnowledgeSearchTool;
+import com.ragpilot.core.domain.RetrievedChunk;
 
 import java.util.List;
 import java.util.Objects;
@@ -40,11 +41,15 @@ public final class KnowledgeFirstDecisionMaker implements ReActAgent.DecisionMak
      */
     @Deprecated
     public KnowledgeFirstDecisionMaker(ToolRegistry registry) {
-        this(registry, (question, evidence) -> {
-            if (evidence == null || evidence.isBlank() || evidence.startsWith("NO_HITS")) {
+        this(registry, (question, chunks) -> {
+            if (chunks == null || chunks.isEmpty()) {
                 return NO_EVIDENCE_ANSWER;
             }
-            return "基于检索结果：\n" + truncate(evidence, 800);
+            StringBuilder sb = new StringBuilder("基于检索结果：\n");
+            for (RetrievedChunk hit : chunks) {
+                sb.append(truncate(hit.chunk().content(), 200)).append('\n');
+            }
+            return truncate(sb.toString(), 800);
         });
     }
 
@@ -61,13 +66,13 @@ public final class KnowledgeFirstDecisionMaker implements ReActAgent.DecisionMak
             return new ReActAgent.Decision(thought, KnowledgeSearchTool.NAME, input);
         }
 
-        String evidence = history.isEmpty() ? ""
-                : history.get(history.size() - 1).observation();
+        // 从历史步骤尾部往前找首次检索的结构化证据，直接交给合成器——
+        // 不再由合成侧对同一问题二次检索（旧版延迟翻倍且热切换时结果可能漂移）
+        List<RetrievedChunk> evidence = lastEvidence(history);
         String answer;
-        if (evidence == null || evidence.isBlank() || evidence.startsWith("NO_HITS")) {
+        if (evidence.isEmpty()) {
             answer = NO_EVIDENCE_ANSWER;
         } else {
-            // 有命中：调合成器（bootstrap 侧会再检索 + Prompt + LLM），不再原文甩 HITS
             try {
                 String synthesized = synthesizer.synthesize(
                         question == null ? "" : question, evidence);
@@ -86,6 +91,17 @@ public final class KnowledgeFirstDecisionMaker implements ReActAgent.DecisionMak
                 AgentStep.FINISH,
                 answer
         );
+    }
+
+    /** 取最近一步携带结构化证据的检索结果；没有则空列表（非检索工具/失败步不产证据）。 */
+    private static List<RetrievedChunk> lastEvidence(List<AgentStep> history) {
+        for (int i = history.size() - 1; i >= 0; i--) {
+            List<RetrievedChunk> chunks = history.get(i).evidence();
+            if (chunks != null && !chunks.isEmpty()) {
+                return chunks;
+            }
+        }
+        return List.of();
     }
 
     private static String escape(String s) {

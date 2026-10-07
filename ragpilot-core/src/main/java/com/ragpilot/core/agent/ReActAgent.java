@@ -56,16 +56,17 @@ public final class ReActAgent {
 
     /**
      * 工具调用端口：F3.1 用 Mock；F3.2 再接到正式 {@code Tool} 接口。
+     * 返回 {@link ToolObservation}：文本供下一步思考，结构化块供答案合成复用（免二次检索）。
      */
     @FunctionalInterface
     public interface ToolInvoker {
         /**
          * @param name  工具名
          * @param input 工具入参文本（通常是 JSON 或查询串）
-         * @return 观察结果文本
+         * @return 观察结果；不得为 null
          * @throws Exception 调用失败（会触发重试）
          */
-        String invoke(String name, String input) throws Exception;
+        ToolObservation invoke(String name, String input) throws Exception;
     }
 
     /**
@@ -182,11 +183,12 @@ public final class ReActAgent {
                         decision.thought(),
                         decision.action(),
                         decision.actionInput(),
-                        outcome.observation(),
+                        outcome.observation().text(),
                         ms,
                         outcome.timedOut(),
                         outcome.retried(),
-                        outcome.failed()
+                        outcome.failed(),
+                        outcome.observation().chunks()
                 ));
 
                 if (outcome.timedOut()) {
@@ -227,21 +229,24 @@ public final class ReActAgent {
                 retried = true;
             }
             try {
-                String obs = runWithTimeout(pool, () -> toolInvoker.invoke(name, input));
-                return new ToolCallOutcome(obs == null ? "" : obs, false, retried, false);
+                ToolObservation obs = runWithTimeout(pool, () -> toolInvoker.invoke(name, input));
+                return new ToolCallOutcome(
+                        obs == null ? ToolObservation.of("") : obs, false, retried, false);
             } catch (TimeoutException e) {
-                return new ToolCallOutcome("TIMEOUT: tool exceeded " + stepTimeout, true, retried, true);
+                return new ToolCallOutcome(ToolObservation.of(
+                        "TIMEOUT: tool exceeded " + stepTimeout), true, retried, true);
             } catch (Exception e) {
                 last = e;
                 log.debug("Tool invoke failed attempt={}: {}", attempt + 1, e.getMessage());
             }
         }
         String msg = last == null ? "unknown error" : last.getMessage();
-        return new ToolCallOutcome("ERROR: " + msg, false, true, true);
+        return new ToolCallOutcome(
+                ToolObservation.of("ERROR: " + msg), false, true, true);
     }
 
-    private String runWithTimeout(ExecutorService pool, Callable<String> task) throws Exception {
-        Future<String> future = pool.submit(task);
+    private ToolObservation runWithTimeout(ExecutorService pool, Callable<ToolObservation> task) throws Exception {
+        Future<ToolObservation> future = pool.submit(task);
         try {
             return future.get(stepTimeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
@@ -257,7 +262,7 @@ public final class ReActAgent {
     }
 
     private record ToolCallOutcome(
-            String observation,
+            ToolObservation observation,
             boolean timedOut,
             boolean retried,
             boolean failed
