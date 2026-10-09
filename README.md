@@ -49,13 +49,18 @@ java -jar ragpilot-bootstrap/target/ragpilot-bootstrap-0.1.0-SNAPSHOT.jar report
 
 Prerequisites: JDK 21、Docker（PGVector）、[LM Studio](https://lmstudio.ai)（chat + embedding 模型已加载并开启 Server）。
 
-可用环境变量覆盖：`RAGPILOT_LLM_BASE_URL`、`RAGPILOT_CHAT_MODEL`、`RAGPILOT_EMBEDDING_MODEL`、`RAGPILOT_DB_HOST/PORT/USER/PASSWORD`。
+可用环境变量覆盖：`RAGPILOT_LLM_BASE_URL`、`RAGPILOT_CHAT_MODEL`、`RAGPILOT_EMBEDDING_MODEL`、`RAGPILOT_DB_HOST/PORT/USER/PASSWORD`。数据库口令**不要**写进仓库，从 `.env` 注入。
 
 ```bash
+# 0) 本地密钥（口令留空会启动失败）
+cp .env.example .env
+# 编辑 .env：POSTGRES_PASSWORD 与 RAGPILOT_DB_PASSWORD 填同一组本地口令
+
 # 1) 起向量库（PG + pgvector，宿主机 5433）
 docker compose up -d
 
-# 2) 启动应用（默认端口见 application.yml，当前 8081）
+# 2) 启动应用（把 .env 导出到当前 shell，否则 Spring 解析不到 RAGPILOT_DB_PASSWORD）
+set -a && source .env && set +a
 ./mvnw -pl ragpilot-bootstrap -am spring-boot:run
 
 # 3) 灌入样例语料

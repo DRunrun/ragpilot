@@ -4,14 +4,14 @@ server:
 spring:
   application:
     name: ragpilot-bootstrap
-  # 向量库数据源：PGVector。默认连本机 compose（见 docker-compose.yml 宿主机 5433）。
-  # 远程库请用环境变量 RAGPILOT_DB_HOST/PORT/USER/PASSWORD 覆盖，不要把公网地址写进仓库。
+  # 向量库数据源：PGVector。默认连本机 compose（宿主机 5433）。
+  # 账号密码必须用环境变量注入（见仓库根目录 .env.example），禁止把真实口令写进仓库。
   # sslmode=disable：非 SSL 的 PG 上若走默认 SSL 协商，会 EOF 导致「尝试连线已失败」。
   # 注意：Spring AI PgVectorStore 启动时 afterPropertiesSet 会建连，PG 必须可达。
   datasource:
-    url: jdbc:postgresql://${RAGPILOT_DB_HOST:121.43.104.199}:${RAGPILOT_DB_PORT:5433}/ragpilot?sslmode=disable
+    url: jdbc:postgresql://${RAGPILOT_DB_HOST:127.0.0.1}:${RAGPILOT_DB_PORT:5433}/${RAGPILOT_DB_NAME:ragpilot}?sslmode=disable
     username: ${RAGPILOT_DB_USER:ragpilot}
-    password: ${RAGPILOT_DB_PASSWORD:ragpilot}
+    password: ${RAGPILOT_DB_PASSWORD}
     hikari:
       # -1：池创建时不因探测失败直接失败；真正连不上仍会在 PgVectorStore 初始化时报错
       initialization-fail-timeout: -1
